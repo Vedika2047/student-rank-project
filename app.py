@@ -6,20 +6,34 @@ from flask import Flask, jsonify, request, render_template, send_file
 from werkzeug.exceptions import NotFound # For handling 404 file errors
 
 # --- 1. Configuration and Setup ---
-EXCEL_FILE_PATH = 'student_records.xlsx' 
+EXCEL_FILE_PATH = '/tmp/student_records.xlsx'
 PASS_CUTOFF = 40 # Pass mark
 
 def init_excel():
-    """Checks if the Excel file exists, and creates it with sample data if not."""
-    if not os.path.exists(EXCEL_FILE_PATH):
-        print("Creating new Excel file with sample data...")
+    """Ensures the Excel file exists in the Vercel-writable /tmp directory."""
+    
+    # Check if the file exists OR if it is empty (Vercel resets /tmp frequently)
+    # We use a robust check to ensure the file is created if missing or cleared.
+    is_missing = not os.path.exists(EXCEL_FILE_PATH)
+    is_empty = os.path.exists(EXCEL_FILE_PATH) and os.path.getsize(EXCEL_FILE_PATH) == 0
+
+    if is_missing or is_empty:
+        print("Creating new Excel file in /tmp with sample data...")
+        
         initial_data = {
             'student_id': ['A001', 'A002', 'A003', 'A004', 'A005'],
             'name': ['Priya Sharma', 'Rajesh Kumar', 'Alia Singh', 'Vikram Taneja', 'Nisha Reddy'],
             'marks': [92, 78, 92, 85, 85]
         }
         df = pd.DataFrame(initial_data)
-        df.to_excel(EXCEL_FILE_PATH, index=False)
+        
+        try:
+            # Ensure the directory exists before attempting to write
+            os.makedirs(os.path.dirname(EXCEL_FILE_PATH), exist_ok=True)
+            df.to_excel(EXCEL_FILE_PATH, index=False)
+        except Exception as e:
+            # Log the error if file creation fails
+            print(f"FATAL: Could not create Excel file in /tmp: {e}")
 
 def read_student_data():
     """Reads all student data from the Excel file into a list of dictionaries."""
