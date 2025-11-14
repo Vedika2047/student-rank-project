@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Rank List Generator - Excel Utility</title>
+    <!-- CSS is assumed to be in the static folder -->
+    <link rel="stylesheet" href="/static/style.css"> 
+</head>
+<body>
+
+    <div class="container">
+        <h1>Excel Rank Utility Tool</h1>
+        
+        <!-- Input Section (Name and Marks) -->
+        <div id="inputSection" class="card">
+            <h2>➕ Add New Student</h2>
+            <div class="input-group">
+                <input type="text" id="studentName" placeholder="Student Name" required>
+                <input type="number" id="studentMarks" placeholder="Marks (0-100)" required min="0" max="100">
+                <button id="addStudentBtn" class="action-btn primary">Add Student</button>
+            </div>
+        </div>
+
+        <!-- File Management and Quick Actions -->
+        <div id="fileManagement" class="card action-grid">
+            
+            <!-- Excel Upload Drop Zone (Click/Drag & Drop) -->
+            <div id="uploadZone" class="upload-zone">
+                <p>Click or Drag & Drop Excel File</p>
+                <input type="file" id="excelFile" accept=".csv, .xlsx, .xls" style="display: none;">
+            </div>
+            
+            <!-- Quick Start -->
+            <button id="generateSampleBtn" class="action-btn secondary">✨ Quick Start (Sample Data)</button>
+            
+            <!-- Download Template -->
+            <a href="/static/Rank_Template.xlsx" download="Rank_Template.xlsx">
+                <button class="action-btn secondary">⬇️ Download Excel Template</button>
+            </a>
+            
+            <!-- Clear All -->
+            <button id="clearAllBtn" class="action-btn danger">🗑️ Clear All Data</button>
+        </div>
+
+        <!-- Sorting Controls and Main Action -->
+        <div id="sortingControls" class="card action-grid">
+            <h2>⚙️ Sort & Download Options</h2>
+            
+            <!-- Row 1: Sort By -->
+            <select id="sortBy" aria-label="Sort By">
+                <option value="marks">Sort By: Marks</option>
+                <option value="name">Sort By: Name</option>
+            </select>
+            
+            <!-- Row 1: Order -->
+            <select id="sortOrder" aria-label="Sort Order">
+                <option value="desc">Order: Descending</option>
+                <option value="asc">Order: Ascending</option>
+            </select>
+
+            <!-- Row 1: Algorithm -->
+            <select id="sortAlgorithm" aria-label="Sorting Algorithm">
+                <option value="built_in">Algorithm: Built-in (Timsort)</option>
+                <option value="merge_sort">Algorithm: Merge Sort</option>
+                <option value="quick_sort">Algorithm: Quick Sort</option>
+                <option value="bubble_sort">Algorithm: Bubble Sort</option>
+                <option value="selection_sort">Algorithm: Selection Sort</option>
+                <option value="insertion_sort">Algorithm: Insertion Sort</option>
+            </select>
+
+            <!-- Row 2: Sort and Download Button -->
+            <button id="sortAndDownloadBtn" class="action-btn success">
+                ✅ Sort & Download Ranked Excel
+            </button>
+        </div>
+        
+        <p id="messageArea" style="margin-top: 10px; font-weight: bold;"></p>
+
+        <!-- Key Statistics Panel -->
+        <div id="statsPanel" class="card">
+            <h2>📊 Key Statistics</h2>
+            <div class="stats-grid">
+                <p>Total Students: <strong id="totalStudents">...</strong></p>
+                <p>Avg. Marks: <strong id="avgMarks">...</strong></p>
+                <p>Highest Marks: <strong id="highestMarks">...</strong></p>
+                <p>Lowest Marks: <strong id="lowestMarks">...</strong></p>
+                <p>Pass Students: <strong id="passCount">...</strong></p>
+                <p>Fail Students: <strong id="failCount">...</strong></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- --- JavaScript Logic --- -->
+    <script>
+        const API_ORIGIN = window.location.origin;
+
+        // --- Helper Function for API Calls and Error Display ---
+        async function apiCall(url, method = 'GET', data = null) {
+            const messageArea = document.getElementById('messageArea');
+            messageArea.textContent = 'Processing...';
+            messageArea.style.color = 'blue';
+
+            const options = {
+                method: method,
+                headers: method === 'POST' && !(data instanceof FormData) ? {'Content-Type': 'application/json'} : {},
+                body: data instanceof FormData ? data : (data ? JSON.stringify(data) : null)
+            };
+
+            try {
+                const response = await fetch(API_ORIGIN + url, options);
+                
+                if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
+                    const result = await response.json();
+                    if (result.success) {
+                        messageArea.textContent = result.message || 'Action completed successfully.';
+                        messageArea.style.color = 'green';
+                        fetchStatistics();
+                        return true;
+                    } else {
+                        messageArea.textContent = `Error: ${result.message || 'An unknown error occurred.'}`;
+                        messageArea.style.color = 'red';
+                        return false;
+                    }
+                } else if (response.ok) {
+                     // Non-JSON response (e.g., successful file upload with no message)
+                     messageArea.textContent = 'File uploaded successfully.';
+                     messageArea.style.color = 'green';
+                     fetchStatistics();
+                     return true;
+                } else {
+                    throw new Error(`HTTP Error: ${response.status}`);
+                }
+            } catch (error) {
+                messageArea.textContent = `Network Error: Could not reach the server.`;
+                messageArea.style.color = 'red';
+                console.error('Fetch error:', error);
+                return false;
+            }
+        }
+
+        // --- Fetch Statistics (Runs after every action) ---
+        async function fetchStatistics() {
+            try {
+                const response = await fetch(API_ORIGIN + '/api/statistics');
+                const stats = await response.json();
+                
+                document.getElementById('totalStudents').textContent = stats.total;
+                document.getElementById('avgMarks').textContent = stats.avg_marks.toFixed(2);
+                document.getElementById('highestMarks').textContent = stats.highest;
+                document.getElementById('lowestMarks').textContent = stats.lowest;
+                document.getElementById('passCount').textContent = stats.pass_count;
+                document.getElementById('failCount').textContent = stats.fail_count;
+            } catch (error) {
+                 document.getElementById('messageArea').textContent = 'Error: Failed to load statistics.';
+                 console.error('Stats fetch error:', error);
+                 // Resetting stats on error
+                 document.getElementById('totalStudents').textContent = 0;
+                 document.getElementById('avgMarks').textContent = '0.00';
+                 document.getElementById('highestMarks').textContent = 0;
+                 document.getElementById('lowestMarks').textContent = 0;
+                 document.getElementById('passCount').textContent = 0;
+                 document.getElementById('failCount').textContent = 0;
+            }
+        }
+        
+        // --- Event Listeners and Core Action Functions ---
+
+        // 1. Add Student
+        document.getElementById('addStudentBtn').addEventListener('click', async () => {
+            const nameInput = document.getElementById('studentName');
+            const marksInput = document.getElementById('studentMarks');
+            const name = nameInput.value.trim();
+            const marks = parseInt(marksInput.value);
+
+            if (!name || isNaN(marks) || marks < 0 || marks > 100) {
+                document.getElementById('messageArea').textContent = 'Please enter valid name and marks (0-100).';
+                document.getElementById('messageArea').style.color = 'orange';
+                return;
+            }
+            
+            const data = { name, marks };
+            const success = await apiCall('/api/add_student', 'POST', data);
+            
+            if (success) {
+                nameInput.value = '';
+                marksInput.value = '';
+            }
+        });
+
+        // 2. Upload Excel (Using Event Delegation for Drag & Drop)
+        const uploadZone = document.getElementById('uploadZone');
+        const excelFileInput = document.getElementById('excelFile');
+
+        function handleFileUpload(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            apiCall('/api/upload_excel', 'POST', formData);
+        }
+
+        uploadZone.addEventListener('click', () => excelFileInput.click());
+        excelFileInput.addEventListener('change', (e) => handleFileUpload(e.target.files[0]));
+
+        // Drag and Drop Handlers
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadZone.addEventListener(eventName, preventDefaults, false);
+        });
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        uploadZone.addEventListener('drop', (e) => {
+            let dt = e.dataTransfer;
+            let files = dt.files;
+            if (files.length > 0) {
+                handleFileUpload(files[0]);
+            }
+        }, false);
+        uploadZone.addEventListener('dragover', () => uploadZone.style.backgroundColor = '#e0f7fa');
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadZone.addEventListener(eventName, () => uploadZone.style.backgroundColor = '#f0f0f0');
+        });
+
+
+        // 3. Quick Start (Sample Data)
+        document.getElementById('generateSampleBtn').addEventListener('click', async () => {
+            await apiCall('/api/generate_sample', 'POST');
+        });
+
+        // 4. Clear All Data
+        document.getElementById('clearAllBtn').addEventListener('click', async () => {
+            if (confirm('Are you sure you want to clear ALL student data? This cannot be undone.')) {
+                await apiCall('/api/clear_all', 'POST');
+            }
+        });
+
+        // 5. Sort and Download Excel (Main Feature)
+        document.getElementById('sortAndDownloadBtn').addEventListener('click', async () => {
+            const sortBy = document.getElementById('sortBy').value;
+            const sortOrder = document.getElementById('sortOrder').value; 
+            const sortAlgorithm = document.getElementById('sortAlgorithm').value;
+            
+            const reverse = (sortOrder === 'desc');
+            
+            // This API call triggers the server to sort and send the file directly
+            const downloadUrl = `/api/download_excel?sort_by=${sortBy}&sort_algorithm=${sortAlgorithm}&reverse=${reverse}`;
+            
+            window.location.href = API_ORIGIN + downloadUrl;
+
+            // Optional message display after initiating download
+            document.getElementById('messageArea').textContent = 'Starting Excel download for ranked data...';
+            document.getElementById('messageArea').style.color = 'green';
+            fetchStatistics();
+        });
+
+        // --- Initial Load ---
+        window.onload = fetchStatistics;
+    </script>
+</body>
+</html>
